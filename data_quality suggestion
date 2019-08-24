@@ -1,0 +1,76 @@
+Orginal Code:
+from airflow.hooks.postgres_hook import PostgresHook
+from airflow.models import BaseOperator
+from airflow.utils.decorators import apply_defaults
+#  operator that checks the data quality of the database
+class DataQualityOperator(BaseOperator):
+
+    ui_color = '#89DA59'
+
+    @apply_defaults
+    def __init__(self,
+                 # Define your operators params (with defaults) here
+                 # Example:
+                 # conn_id = your-connection-name
+                 conn_id="",
+                 aws_credentials_id="",
+                 dq_checks = [],
+                 *args, **kwargs):
+
+        super(DataQualityOperator, self).__init__(*args, **kwargs)
+        # Map params here
+        # Example:
+        self.conn_id = conn_id
+        self.aws_credentials_id = aws_credentials_id 
+        self.dq_checks = dq_checks
+        
+
+#data quality checks for the data
+# checking if the tables have any reords.
+    def execute(self, context):
+        self.log.info('DataQualityOperator not implemented yet')
+        redshift_hook = PostgresHook("redshift")
+        for check in self.dq_checks:
+            sql = check.get('check_sql')
+            exp_result = check.get('expected_result')
+
+            records = redshift.get_records(sql)[0]
+
+            if exp_result != records[0]:
+                error_count += 1
+                failing_tests.append(sql)
+
+        if error_count > 0:
+            self.log.info('Tests failed')
+            self.log.info(failing_tests)
+            raise ValueError('Data quality check failed')
+            
+#Suggested fix:
+#Here is another way to pass an array of checks and runs them in a loop.
+
+
+  def execute(self, context):
+        # AWS Hook
+        aws_hook = AwsHook(self.aws_credentials_id)
+        credentials = aws_hook.get_credentials()
+        # RedShift Hook
+        redshift = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+
+        # Test each table
+        for table_dict in self.table_info_dict:
+            table_name = table_dict["table_name"]
+            column_that_should_not_be_null = table_dict["not_null"]
+            # Check number of records (pass if > 0, else fail)
+            records = redshift.get_records(f"SELECT COUNT(*) FROM {table_name}")
+            if len(records) < 1 or len(records[0]) < 1:
+                raise ValueError(f"Data quality check failed. {table_name} returned no results")
+            elif records[0][0] < 1:
+                raise ValueError(f"Data quality check failed. {table_name} contained 0 rows")
+            else:
+                # Now check is NOT NULL columns contain NULL
+                null_records = redshift.get_records(f"SELECT COUNT(*) FROM {table_name} WHERE {column_that_should_not_be_null} IS NULL")
+                if null_records[0][0] > 0:
+                    col = column_that_should_not_be_null
+                    raise ValueError(f"Data quality check failed. {table_name} contained {null_records[0][0]} null records for {col}")
+                else:
+                    self.log.info(f"Data quality on table {table_name} check passed with {records[0][0]} records")

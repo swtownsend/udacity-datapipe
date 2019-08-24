@@ -1,0 +1,65 @@
+airflow/plugins/operators/stage_redshift.py 
+
+Orginal Code
+ def execute(self, context):
+        self.log.info('StageToRedshiftOperator not implemented yet')
+        # creating the hooks need to access aws and the database
+        aws_hook = AwsHook(self.aws_credentials_id)
+                credentials = aws_hook.get_credentials()
+        redshift = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+        
+        #deleting any old data or bad data in the database before loading 
+        # the test data 
+        self.log.info("Clearing data from destination Redshift table")
+        redshift.run("DELETE FROM {}".format(self.table))
+        
+        # get the files from the s3 bucket
+        self.log.info("Copying data from S3 to Redshift")
+        rendered_key = self.s3_key.format(**context)
+        execution_date = kwargs["ds"]
+        year = execution_date.year
+        month = execution_date.month
+        if rendered_key == "log_data/":
+            s3_path = "{}/{}/{}/{}".format(self.s3_bucket,year,month,rendered_key)
+        else:
+            s3_path = "{}/{}".format(self.s3_bucket,year,month,rendered_key)
+        
+        # create the sql script need to copy the data into the database
+        #formatted_sql = StageToRedshiftOperator.copy_sql.format(
+        formatted_sql = StageToRedshiftOperator.formatted_sql.format(
+            self.table,
+            s3_path,
+            credentials.access_key,
+            credentials.secret_key,
+        )
+
+        # run the sql
+        redshift.run(formatted_sql)
+ 
+ 
+ Suggestion to Fix:
+ 	
+You can also add a condition to test the file type if it is JSON or CSV:
+
+def execute(self, context):
+
+        if not (self.file_format == 'csv' or self.file_format == 'json'):
+            raise ValueError(f"file format {self.file_format} is not csv or json")
+        if self.file_format == 'json':
+
+            file_format = "format json '{}'".format(self.json_path)
+        else:
+            file_format = "format CSV"
+        aws_hook = AwsHook(self.aws_conn_id)
+        credentials = aws_hook.get_credentials()
+        redshift = PostgresHook(postgres_conn_id = self.redshift_conn_id)
+
+        staging_to_redshift_sql = StageToRedshiftOperator.copysql.format(table_name = self.table_name,
+            path = self.table_path,aws_key = credentials.access_key,aws_secret = credentials.secret_key,file_format =file_format)
+
+        self.log.info("Clearing data from destination Redshift table")
+        redshift.run("DELETE FROM {};".format(self.table_name))
+
+        self.log.info(f'now loading {self.table_name} to redshift...')
+        redshift.run(staging_to_redshift_sql)
+        self.log.info(f'{self.table_name} loaded...')
